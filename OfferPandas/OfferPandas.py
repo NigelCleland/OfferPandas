@@ -42,7 +42,10 @@ class OfferFrame(DataFrame):
 
 
     def stack_frame(self):
-        return OfferFrame(pd.concat(self._stack_frame(), ignore_index=True))
+        arr = pd.concat(self._stack_frame(), ignore_index=True)
+        max_names = ("Power", "Max")
+        arr.rename(columns={x: "Quantity" for x in max_names}, inplace=True)
+        return OfferFrame(arr)
 
 
     def _stack_frame(self):
@@ -117,6 +120,8 @@ class OfferFrame(DataFrame):
 
         return OfferFrame(self)
 
+    def price_stack(self):
+        return self.groupby(["Timestamp", "Price"])["Quantity"].sum()
 
-
-
+    def incrementalise(self):
+        pass
