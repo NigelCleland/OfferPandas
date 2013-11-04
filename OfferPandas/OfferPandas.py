@@ -22,15 +22,15 @@ class OfferFrame(DataFrame):
 
     def transmogrify(self):
         arr = self._retitle_columns()._map_frame()._convert_date()
-        arr = arr._create_timestamp().stack_frame()
+        arr = arr._create_timestamp().stack_frame()._market_node()
         return arr
 
     def _retitle_columns(self):
 
-        self.rename(columns={x: x.strip().replace('_', ' ').title()
+        self.rename(columns={x: x.strip().title()
                     for x in self.columns}, inplace=True)
 
-        grid_names = ("Grid Point", "Grid Injection Point", "Grid Exit Point")
+        grid_names = ("Grid_Point", "Grid_Injection_Point", "Grid_Exit_Point")
         self.rename(columns={x: "Node" for x in grid_names}, inplace=True)
 
         return self
@@ -56,8 +56,8 @@ class OfferFrame(DataFrame):
         for key in fdict:
             allcols = general_columns + fdict[key].values()
             single = self[allcols].copy()
-            single["Product Type"] = key[0]
-            single["Reserve Type"] = key[1]
+            single["Product_Type"] = key[0]
+            single["Reserve_Type"] = key[1]
             single["Band"] = key[2]
             single.rename(columns={v:k for k, v in fdict[key].items()},
                           inplace=True)
@@ -68,7 +68,7 @@ class OfferFrame(DataFrame):
         band_columns = [x for x in self.columns if "Band" in x]
         fdict = defaultdict(dict)
         for band in band_columns:
-            number, param = (int(band.split()[0][4:]), band.split()[-1])
+            number, param = (int(band.split('_')[0][4:]), band.split('_')[-1])
             rt, pt = (self._reserve_type(band), self._product_type(band))
             fdict[(pt, rt, number)][param] = band
         return fdict
@@ -91,14 +91,14 @@ class OfferFrame(DataFrame):
 
 
     def _convert_date(self):
-        self["Trading Date"] = pd.to_datetime(self["Trading Date"])
+        self["Trading_Date"] = pd.to_datetime(self["Trading_Date"])
         return self
 
 
     def _create_timestamp(self):
         num_min = {x: datetime.timedelta(minutes=x*30-15)
-                  for x in self["Trading Period"].unique()}
-        self["Timestamp"] = self["Trading Date"] + self["Trading Period"].map(num_min)
+                  for x in self["Trading_Period"].unique()}
+        self["Timestamp"] = self["Trading_Date"] + self["Trading_Period"].map(num_min)
         return self
 
     def efilter(self, **kargs):
@@ -124,4 +124,20 @@ class OfferFrame(DataFrame):
         return self.groupby(["Timestamp", "Price"])["Quantity"].sum()
 
     def incrementalise(self):
-        pass
+        self["Incr Quantity"] = 1
+        return pd.concat(self._single_increment(), axis=1).T
+
+    def _market_node(self):
+        lammn = lambda x: " ".join([x[0], "".join([x[1], str(x[2])])])
+        self["Market_Node_ID"] = self[["Node", "Station", "Unit"]].apply(
+                        lammn, axis=1)
+        return self
+
+    def _single_increment(self):
+        """ Note assume a single timestamp """
+        for index, series in self.iterrows():
+            power = series["Quantity"]
+            while power > 0:
+                yield series
+                power -= 1
+
