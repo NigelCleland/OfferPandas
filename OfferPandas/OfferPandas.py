@@ -10,6 +10,7 @@ import datetime
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
 
+
     def __new__(cls, *args, **kargs):
 
         arr = DataFrame.__new__(cls, *args, **kargs)
@@ -29,12 +30,15 @@ class OfferFrame(DataFrame):
 
         return self
 
+
     def map_frame(self):
         mapping = pd.read_csv("_static/nodal_metadata.csv")
         return OfferFrame(self.merge(mapping, left_on="Node", right_on="Node"))
 
+
     def stack_frame(self):
         return OfferFrame(pd.concat(self._stack_frame(), ignore_index=True))
+
 
     def _stack_frame(self):
 
@@ -51,6 +55,7 @@ class OfferFrame(DataFrame):
                           inplace=True)
             yield single
 
+
     def _classify_bands(self):
         band_columns = [x for x in self.columns if "Band" in x]
         fdict = defaultdict(dict)
@@ -65,6 +70,7 @@ class OfferFrame(DataFrame):
     def _reserve_type(self, band):
         return "FIR" if "6S" in band else "SIR" if "60S" in band else "Energy"
 
+
     def _product_type(self, band):
         if "Plsr" in band:
             return "PLSR"
@@ -75,14 +81,37 @@ class OfferFrame(DataFrame):
         else:
             return "Energy"
 
+
     def _convert_date(self):
         self["Trading Date"] = pd.to_datetime(self["Trading Date"])
         return self
+
 
     def _create_timestamp(self):
         num_min = {x: datetime.timedelta(minutes=x*30-15)
                   for x in self["Trading Period"].unique()}
         self["Timestamp"] = self["Trading Date"] + self["Trading Period"].map(num_min)
         return self
+
+    def efilter(self, **kargs):
+        arr = self.copy()
+        for key, value in kargs.iteritems():
+            arr = arr[arr[key] == value]
+        return OfferFrame(arr)
+
+    def rfilter(self, **kargs):
+        arr = self.copy()
+        for key, values in kargs.iteritems():
+            arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
+        return OfferFrame(arr)
+
+    def nfilter(self, **kargs):
+        arr = self.copy()
+        for key, value in kargs.iteritems():
+            self = arr[arr[key] != value]
+
+        return OfferFrame(self)
+
+
 
 
