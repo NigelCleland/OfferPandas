@@ -20,7 +20,12 @@ class OfferFrame(DataFrame):
         else:
             return arr.view(OfferFrame)
 
-    def retitle_columns(self):
+    def transmogrify(self):
+        arr = self._retitle_columns()._map_frame()._convert_date()
+        arr = arr._create_timestamp().stack_frame()
+        return arr
+
+    def _retitle_columns(self):
 
         self.rename(columns={x: x.strip().replace('_', ' ').title()
                     for x in self.columns}, inplace=True)
@@ -31,7 +36,7 @@ class OfferFrame(DataFrame):
         return self
 
 
-    def map_frame(self):
+    def _map_frame(self):
         mapping = pd.read_csv("_static/nodal_metadata.csv")
         return OfferFrame(self.merge(mapping, left_on="Node", right_on="Node"))
 
