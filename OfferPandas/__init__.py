@@ -4,3 +4,5 @@
 __author__ = 'Nigel Cleland'
 __email__ = 'nigel.cleland@gmail.com'
 __version__ = '0.1.0'
+
+from OfferPandas import OfferFrame

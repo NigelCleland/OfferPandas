@@ -138,6 +138,6 @@ class OfferFrame(DataFrame):
         for index, series in self.iterrows():
             power = series["Quantity"]
             while power > 0:
+                series["Incr Quantity"] = min(1, power)
                 yield series
                 power -= 1
-
