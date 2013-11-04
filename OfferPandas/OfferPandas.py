@@ -5,6 +5,7 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from collections import defaultdict
+import datetime
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -73,5 +74,15 @@ class OfferFrame(DataFrame):
             return "IL"
         else:
             return "Energy"
+
+    def _convert_date(self):
+        self["Trading Date"] = pd.to_datetime(self["Trading Date"])
+        return self
+
+    def _create_timestamp(self):
+        num_min = {x: datetime.timedelta(minutes=x*30-15)
+                  for x in self["Trading Period"].unique()}
+        self["Timestamp"] = self["Trading Date"] + self["Trading Period"].map(num_min)
+        return self
 
 
