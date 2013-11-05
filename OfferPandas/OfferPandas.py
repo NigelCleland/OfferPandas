@@ -46,6 +46,8 @@ class OfferFrame(DataFrame):
 
     def _map_frame(self):
         mapping = pd.read_csv("_static/nodal_metadata.csv")
+        mapping.rename(columns={x: x.replace(' ', '_')
+                        for x in mapping.columns}, inplace=True)
         return OfferFrame(self.merge(mapping, left_on="Node", right_on="Node"))
 
 
