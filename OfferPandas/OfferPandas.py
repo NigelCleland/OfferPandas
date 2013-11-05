@@ -21,7 +21,8 @@ class OfferFrame(DataFrame):
             return arr.view(OfferFrame)
 
     def transmogrify(self):
-        arr = self._retitle_columns()._map_frame()._convert_date()
+        arr = self._retitle_columns()._scrub_whitespace()._map_frame()
+        arr = arr._convert_date()
         arr = arr._create_timestamp().stack_frame()._market_node()
         return arr
 
@@ -32,6 +33,13 @@ class OfferFrame(DataFrame):
 
         grid_names = ("Grid_Point", "Grid_Injection_Point", "Grid_Exit_Point")
         self.rename(columns={x: "Node" for x in grid_names}, inplace=True)
+
+        return self
+
+    def _scrub_whitespace(self):
+        for col in self.columns:
+            if self[col].dtype == "O":
+                self[col] = self[col].apply(lambda x: x.strip())
 
         return self
 
@@ -96,13 +104,19 @@ class OfferFrame(DataFrame):
 
 
     def _create_timestamp(self):
-        num_min = {x: datetime.timedelta(minutes=x*30-15)
+        num_min = {x: datetime.timedelta(minutes=int(x*30-15))
                   for x in self["Trading_Period"].unique()}
-        self["Timestamp"] = self["Trading_Date"] + self["Trading_Period"].map(num_min)
+
+        minutes = self["Trading_Period"].map(num_min)
+        self["Timestamp"] = self["Trading_Date"] + minutes
         return self
 
-    def efilter(self, **kargs):
+    def efilter(self, dict_arg=None, **kargs):
         arr = self.copy()
+        if dict_arg:
+            for key, value in dict_arg.iteritems():
+                arr = arr[arr[key] == value]
+
         for key, value in kargs.iteritems():
             arr = arr[arr[key] == value]
         return OfferFrame(arr)
@@ -120,18 +134,22 @@ class OfferFrame(DataFrame):
 
         return OfferFrame(self)
 
+
     def price_stack(self):
         return self.groupby(["Timestamp", "Price"])["Quantity"].sum()
+
 
     def incrementalise(self):
         self["Incr Quantity"] = 1
         return pd.concat(self._single_increment(), axis=1).T
+
 
     def _market_node(self):
         lammn = lambda x: " ".join([x[0], "".join([x[1], str(x[2])])])
         self["Market_Node_ID"] = self[["Node", "Station", "Unit"]].apply(
                         lammn, axis=1)
         return self
+
 
     def _single_increment(self):
         """ Note assume a single timestamp """
