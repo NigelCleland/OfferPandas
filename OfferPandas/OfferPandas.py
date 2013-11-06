@@ -161,3 +161,44 @@ class OfferFrame(DataFrame):
                 series["Incr Quantity"] = min(1, power)
                 yield series
                 power -= 1
+
+
+    def _bathtub(self, capacity):
+
+        arr = self.sort("Price")
+        capline = np.arange(0, capacity+1,1)
+        rline = np.zeros(len(capline))
+        filt_old = np.zeros(len(capline))
+        rdict = {}
+        for index, row in arr.iterrows():
+            price = row["Price"]
+
+            reserve = capline * row["Percent"] / 100.
+            rmap = np.where(reserve <= row["Quantity"], reserve, row["Quantity"])
+
+            rline = rline + rmap
+            filt = np.where(rline <= capline[::-1], rline, capline[::-1])
+            rdict[price] = filt - filt_old
+            filt_old = filt.copy()
+
+        # Create a DF
+        df = pd.DataFrame(rdict)
+        df.index = capline
+        return df
+
+    def _merge_incr(self, bathframe):
+
+        ll = []
+        for col in bathframe.columns:
+            t = self.copy()
+            t["Cumulative Quantity"] = t["Incr Quantity"].cumsum()
+            t.index = t["Cumulative Quantity"]
+            t["Price"] = col
+            t["Reserve Quantity"] = bathframe[col].copy()
+            ll.append(t.copy())
+        return pd.concat(ll, ignore_index=True)
+
+
+
+
+
