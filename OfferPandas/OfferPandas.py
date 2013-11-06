@@ -176,13 +176,13 @@ class OfferFrame(DataFrame):
 
             rline = rline + rmap
             filt = np.where(rline <= capline[::-1], rline, capline[::-1])
-            rdict[price] = filt - filt_old
+            entry = filt - filt_old
+            rdict[price] = entry[1:] - entry[:-1]
             filt_old = filt.copy()
 
         # Create a DF
         df = pd.DataFrame(rdict)
-        df.index = capline
-
+        df.index = np.arange(1, len(df)+1,1)
         df = pd.DataFrame({"Reserve_Quantity": df.stack()})
         df["Cumulative_Quantity"] = df.index.map(lambda x: x[0])
         df["Reserve_Price"] = df.index.map(lambda x: x[1])
@@ -194,11 +194,11 @@ class OfferFrame(DataFrame):
 
         #self["Cumulative_Quantity"] = self["Incr Quantity"].cumsum()
         indices = ("Market_Node_ID", "Cumulative_Quantity")
-        try:
+        if len(reserve) > 0:
             bath = reserve._bathtub(self["Max_Output"].max())
             return self.merge(bath, left_on=indices, right_on=indices,
                          how='outer')
-        except:
+        else:
             return self
 
     def create_fan(self, reserveoffer, reserve_type="FIR", product_type="PLSR"):
