@@ -6,6 +6,7 @@ from pandas import DataFrame
 import numpy as np
 from collections import defaultdict
 import datetime
+import itertools
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -113,12 +114,8 @@ class OfferFrame(DataFrame):
         self["Timestamp"] = self["Trading_Date"] + minutes
         return self
 
-    def efilter(self, dict_arg=None, **kargs):
+    def efilter(self, **kargs):
         arr = self.copy()
-        if dict_arg:
-            for key, value in dict_arg.iteritems():
-                arr = arr[arr[key] == value]
-
         for key, value in kargs.iteritems():
             arr = arr[arr[key] == value]
         return OfferFrame(arr)
@@ -143,7 +140,7 @@ class OfferFrame(DataFrame):
 
     def incrementalise(self):
         self["Incr Quantity"] = 1
-        return pd.concat(self._single_increment(), axis=1).T
+        return OfferFrame(pd.concat(self._single_increment(), axis=1).T)
 
 
     def _market_node(self):
@@ -157,16 +154,17 @@ class OfferFrame(DataFrame):
         """ Note assume a single timestamp """
         for index, series in self.iterrows():
             power = series["Quantity"]
+            series["Incr Quantity"] = 1
             while power > 0:
                 series["Incr Quantity"] = min(1, power)
-                yield series
+                yield series.copy()
                 power -= 1
 
 
     def _bathtub(self, capacity):
 
         arr = self.sort("Price")
-        capline = np.arange(0, capacity+1,1)
+        capline = np.arange(1, capacity+1,1)
         rline = np.zeros(len(capline))
         filt_old = np.zeros(len(capline))
         rdict = {}
@@ -184,19 +182,45 @@ class OfferFrame(DataFrame):
         # Create a DF
         df = pd.DataFrame(rdict)
         df.index = capline
+
+        df = pd.DataFrame({"Reserve_Quantity": df.stack()})
+        df["Cumulative_Quantity"] = df.index.map(lambda x: x[0])
+        df["Reserve_Price"] = df.index.map(lambda x: x[1])
+        df["Market_Node_ID"] = arr["Market_Node_ID"].unique()[0]
+        #df["Timestamp"] = arr["Timestamp"].unique()[0]
         return df
 
-    def _merge_incr(self, bathframe):
+    def _merge_incr(self, reserve):
 
-        ll = []
-        for col in bathframe.columns:
-            t = self.copy()
-            t["Cumulative Quantity"] = t["Incr Quantity"].cumsum()
-            t.index = t["Cumulative Quantity"]
-            t["Price"] = col
-            t["Reserve Quantity"] = bathframe[col].copy()
-            ll.append(t.copy())
-        return pd.concat(ll, ignore_index=True)
+        #self["Cumulative_Quantity"] = self["Incr Quantity"].cumsum()
+        indices = ("Market_Node_ID", "Cumulative_Quantity")
+        try:
+            bath = reserve._bathtub(self["Max_Output"].max())
+            return self.merge(bath, left_on=indices, right_on=indices,
+                         how='outer')
+        except:
+            return self
+
+    def create_fan(self, reserveoffer, reserve_type="FIR", product_type="PLSR"):
+        return pd.concat(self._create_fan(reserveoffer, reserve_type, product_type), ignore_index=True)
+
+    def _create_fan(self, reserveoffer, reserve_type, product_type):
+
+        arr = self.incrementalise()
+        for index, stamp, mnode in set(arr[["Timestamp", "Market_Node_ID"]].itertuples()):
+
+            energy = arr.efilter(Timestamp=stamp, Market_Node_ID=mnode).nfilter(Quantity=0)
+            reserve = reserveoffer.efilter(Timestamp=stamp, Market_Node_ID=mnode, Reserve_Type=reserve_type, Product_Type=product_type).nfilter(Quantity=0)
+
+            energy["Cumulative_Quantity"] = energy["Incr Quantity"].cumsum()
+            #bathframe = reserve._bathtub(energy["Max_Output"].max())
+
+            yield energy._merge_incr(reserve)
+
+
+
+
+
 
 
 
