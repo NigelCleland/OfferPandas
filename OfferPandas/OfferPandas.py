@@ -110,6 +110,8 @@ class OfferFrame(DataFrame):
 
         return band_listing
 
+    def create_map(self, func, items):
+        return {x: func(x) for x in items}
 
     def _convert_date(self):
         self["Trading_Date"] = pd.to_datetime(self["Trading_Date"])
@@ -118,9 +120,10 @@ class OfferFrame(DataFrame):
 
     def _create_timestamp(self):
         create_time = lambda x: datetime.timedelta(minutes=int(x*30-15))
-        per_map = {x: create_time(x) for x in self["Trading_Period"].unique()}
+        periods = np.arange(1,51,1)
+        minute_map = self.create_map(create_time, periods)
 
-        minutes = self["Trading_Period"].map(per_map)
+        minutes = self["Trading_Period"].map(minute_map)
         self["Timestamp"] = self["Trading_Date"] + minutes
         return self
 
