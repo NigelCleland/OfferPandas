@@ -8,6 +8,7 @@ from collections import defaultdict
 import datetime
 import itertools
 
+
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
 
@@ -113,6 +114,7 @@ class OfferFrame(DataFrame):
     def create_map(self, func, items):
         return {x: func(x) for x in items}
 
+
     def _convert_date(self):
         self["Trading_Date"] = pd.to_datetime(self["Trading_Date"])
         return self
@@ -127,17 +129,20 @@ class OfferFrame(DataFrame):
         self["Timestamp"] = self["Trading_Date"] + minutes
         return self
 
+
     def efilter(self, **kargs):
         arr = self.copy()
         for key, value in kargs.iteritems():
             arr = arr[arr[key] == value]
         return OfferFrame(arr)
 
+
     def rfilter(self, **kargs):
         arr = self.copy()
         for key, values in kargs.iteritems():
             arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
         return OfferFrame(arr)
+
 
     def nfilter(self, **kargs):
         arr = self.copy()
@@ -168,6 +173,10 @@ class OfferFrame(DataFrame):
 
     def _single_increment(self):
         """ Note assume a single timestamp """
+        # Initialise the column here, important don't remove
+        self["Incr Quantity"] = 1
+        # Iterate through the series and adjust incr quantity to a fractional
+        # Offer as needed
         for index, series in self.iterrows():
             power = series["Quantity"]
             series["Incr Quantity"] = 1
@@ -218,10 +227,10 @@ class OfferFrame(DataFrame):
 
         # Create a DF
         df = pd.DataFrame(offer_curves)
-
         df.index = np.arange(1, len(df)+1,1)
 
         bathtub = pd.DataFrame({"Reserve_Quantity": df.stack()})
+
         # Filter the index to get the cumulaive quantity and price
         bathtub["Cumulative_Quantity"] = bathtub.index.map(lambda x: x[0])
         bathtub["Reserve_Price"] = bathtub.index.map(lambda x: x[1])
@@ -234,12 +243,41 @@ class OfferFrame(DataFrame):
 
         #self["Cumulative_Quantity"] = self["Incr Quantity"].cumsum()
         indices = ("Market_Node_ID", "Cumulative_Quantity")
+        capacity = self["Max_Output"].max()
+
         if len(reserve) > 0:
-            bath = reserve._bathtub(self["Max_Output"].max())
-            return self.merge(bath, left_on=indices, right_on=indices,
-                              how='outer')
+            bath = reserve._bathtub(capacity)
+
+            return self.merge(bath, left_on=indices, right_on=indices)
         else:
             return self
+
+
+    def aggregate_fan(self, price):
+        """ Assumes than the OfferFrame is in the fan representation
+        """
+
+        arr1 = self.rfilter(Reserve_Price=(0, price))
+        arr2 = self.rfilter(Reserve_Price=(price+0.001, 1000000))
+        arr2["Reserve_Quantity"] = 0
+        arr = pd.concat([arr1, arr2], ignore_index=True)
+
+
+        agg_met = {"Incr Quantity": np.max,
+                   "Reserve_Quantity": np.sum}
+
+        group_indices = ("Market_Node_ID", "Cumulative_Quantity", "Price")
+
+        return arr.groupby(group_indices, as_index=False).aggregate(agg_met).sort("Price")
+
+
+    def plot_fan(self, price_increments=None):
+        """ Assumes the OfferFrame is represented as a Fan
+        """
+
+        fig, axes = plt.subplots(1, 1, figsize=(16,9))
+
+
 
 
     def create_fan(self, reserveoffer, reserve_type="FIR",
@@ -249,8 +287,17 @@ class OfferFrame(DataFrame):
         at either a composite or an individual station level.
 
         """
-        return pd.concat(self._create_fan(reserveoffer, reserve_type,
+        fan = pd.concat(self._create_fan(reserveoffer, reserve_type,
                          product_type), ignore_index=True)
+
+        # Drop Dupes
+        fan = fan.drop_duplicates()
+
+        # Fill with zeros
+        fan = fan.fillna(0)
+
+        # Return as a functioning OfferFrame
+        return OfferFrame(fan)
 
 
     def _create_fan(self, reserveoffer, reserve_type, product_type):
@@ -271,7 +318,6 @@ class OfferFrame(DataFrame):
                                            ).nfilter(Quantity=0)
 
             energy["Cumulative_Quantity"] = energy["Incr Quantity"].cumsum()
-            #bathframe = reserve._bathtub(energy["Max_Output"].max())
 
             yield energy._merge_incr(reserve)
 
