@@ -76,29 +76,39 @@ class OfferFrame(DataFrame):
 
 
     def _classify_bands(self):
+
+        def band_classifier(band):
+            split = band.split('_')
+            return int(split[0][4:]), split[-1]
+
+        def reserve_classifier(band):
+            if "6S" in band:
+                return "FIR"
+            elif "60S" in band:
+                return "SIR"
+            else:
+                return "Energy"
+
+        def product_classifier(band):
+            if "Plsr" in band:
+                return "PLSR"
+            elif "Twdsr" in band:
+                return "TWDSR"
+            elif "6S" in band or "60S" in band:
+                return "IL"
+            else:
+                return "Energy"
+
         band_columns = [x for x in self.columns if "Band" in x]
-        fdict = defaultdict(dict)
+        band_listing = defaultdict(dict)
         for band in band_columns:
-            number, param = (int(band.split('_')[0][4:]), band.split('_')[-1])
-            rt, pt = (self._reserve_type(band), self._product_type(band))
-            fdict[(pt, rt, number)][param] = band
-        return fdict
 
+            number, param =  band_classifier(band)
+            rt, pt = (reserve_classifier(band), product_classifier(band))
 
+            band_listing[(pt, rt, number)][param] = band
 
-    def _reserve_type(self, band):
-        return "FIR" if "6S" in band else "SIR" if "60S" in band else "Energy"
-
-
-    def _product_type(self, band):
-        if "Plsr" in band:
-            return "PLSR"
-        elif "Twdsr" in band:
-            return "TWDSR"
-        elif "6S" in band or "60S" in band:
-            return "IL"
-        else:
-            return "Energy"
+        return band_listing
 
 
     def _convert_date(self):
@@ -107,10 +117,10 @@ class OfferFrame(DataFrame):
 
 
     def _create_timestamp(self):
-        num_min = {x: datetime.timedelta(minutes=int(x*30-15))
-                  for x in self["Trading_Period"].unique()}
+        create_time = lambda x: datetime.timedelta(minutes=int(x*30-15))
+        per_map = {x: create_time(x) for x in self["Trading_Period"].unique()}
 
-        minutes = self["Trading_Period"].map(num_min)
+        minutes = self["Trading_Period"].map(per_map)
         self["Timestamp"] = self["Trading_Date"] + minutes
         return self
 
@@ -144,9 +154,9 @@ class OfferFrame(DataFrame):
 
 
     def _market_node(self):
-        lammn = lambda x: " ".join([x[0], "".join([x[1], str(x[2])])])
-        self["Market_Node_ID"] = self[["Node", "Station", "Unit"]].apply(
-                        lammn, axis=1)
+        create_node = lambda x: " ".join([x[0], "".join([x[1], str(x[2])])])
+        self["Market_Node_ID"] = self[["Node", "Station",
+                                       "Unit"]].apply(create_node, axis=1)
         return self
 
 
@@ -162,33 +172,56 @@ class OfferFrame(DataFrame):
 
 
     def _bathtub(self, capacity):
+        """ A series of operations to create a Bathtub constraint upon
+        a reserve offer for a particular unit.
+        The maximum capacity of the unit needs to be passed to the function.
+        This function is called by the fan curve function.
 
+        """
         arr = self.sort("Price")
-        capline = np.arange(1, capacity+1,1)
-        rline = np.zeros(len(capline))
-        filt_old = np.zeros(len(capline))
-        rdict = {}
+        market_node = arr["Market_Node_ID"].unique()[0]
+
+        # Set up vectors for marginal calculations
+        capacity_line = np.arange(1, capacity+1,1)
+        reserve_line = np.zeros(len(capacity_line))
+        previous_offer = np.zeros(len(capacity_line))
+
+        offer_curves = {}
+
         for index, row in arr.iterrows():
             price = row["Price"]
 
-            reserve = capline * row["Percent"] / 100.
-            rmap = np.where(reserve <= row["Quantity"], reserve, row["Quantity"])
+            reserve = capacity_line * row["Percent"] / 100.
 
-            rline = rline + rmap
-            filt = np.where(rline <= capline[::-1], rline, capline[::-1])
-            entry = filt - filt_old
-            rdict[price] = entry[1:] - entry[:-1]
-            filt_old = filt.copy()
+            # Boolean to set marginal offer to the maximum as needed
+            partial_offer = np.where(reserve <= row["Quantity"],
+                            reserve, row["Quantity"])
+
+            # Add them together
+            reserve_line = reserve_line + partial_offer
+
+            # Boolean to handle the combined capacity constraint
+            full_offer = np.where(reserve_line <= capacity_line[::-1],
+                                  reserve_line, capacity_line[::-1])
+
+            # Get a Marginal Offer for moving up the stacks
+            marginal_offer = full_offer - previous_offer
+            offer_curves[price] = marginal_offer[1:] - marginal_offer[:-1]
+            previous_offer = full_offer.copy()
 
         # Create a DF
-        df = pd.DataFrame(rdict)
+        df = pd.DataFrame(offer_curves)
+
         df.index = np.arange(1, len(df)+1,1)
-        df = pd.DataFrame({"Reserve_Quantity": df.stack()})
-        df["Cumulative_Quantity"] = df.index.map(lambda x: x[0])
-        df["Reserve_Price"] = df.index.map(lambda x: x[1])
-        df["Market_Node_ID"] = arr["Market_Node_ID"].unique()[0]
-        #df["Timestamp"] = arr["Timestamp"].unique()[0]
-        return df
+
+        bathtub = pd.DataFrame({"Reserve_Quantity": df.stack()})
+        # Filter the index to get the cumulaive quantity and price
+        bathtub["Cumulative_Quantity"] = bathtub.index.map(lambda x: x[0])
+        bathtub["Reserve_Price"] = bathtub.index.map(lambda x: x[1])
+
+        bathtub["Market_Node_ID"] = market_node
+        #bathtub["Timestamp"] = arr["Timestamp"].unique()[0]
+        return bathtub
 
     def _merge_incr(self, reserve):
 
@@ -197,20 +230,39 @@ class OfferFrame(DataFrame):
         if len(reserve) > 0:
             bath = reserve._bathtub(self["Max_Output"].max())
             return self.merge(bath, left_on=indices, right_on=indices,
-                         how='outer')
+                              how='outer')
         else:
             return self
 
-    def create_fan(self, reserveoffer, reserve_type="FIR", product_type="PLSR"):
-        return pd.concat(self._create_fan(reserveoffer, reserve_type, product_type), ignore_index=True)
+
+    def create_fan(self, reserveoffer, reserve_type="FIR",
+                   product_type="PLSR"):
+        """ Creates a Fan Curve representation of the data which can be
+        used to view the trade off between energy and reserve offers
+        at either a composite or an individual station level.
+
+        """
+        return pd.concat(self._create_fan(reserveoffer, reserve_type,
+                         product_type), ignore_index=True)
+
 
     def _create_fan(self, reserveoffer, reserve_type, product_type):
+        """ Creates the fan curve
+
+        """
 
         arr = self.incrementalise()
-        for index, stamp, mnode in set(arr[["Timestamp", "Market_Node_ID"]].itertuples()):
+        for index, stamp, mnode in set(arr[["Timestamp",
+                                            "Market_Node_ID"]].itertuples()):
 
-            energy = arr.efilter(Timestamp=stamp, Market_Node_ID=mnode).nfilter(Quantity=0)
-            reserve = reserveoffer.efilter(Timestamp=stamp, Market_Node_ID=mnode, Reserve_Type=reserve_type, Product_Type=product_type).nfilter(Quantity=0)
+            energy = arr.efilter(Timestamp=stamp,
+                                 Market_Node_ID=mnode).nfilter(Quantity=0)
+
+            reserve = reserveoffer.efilter(Timestamp=stamp,
+                                           Market_Node_ID=mnode,
+                                           Reserve_Type=reserve_type,
+                                           Product_Type=product_type
+                                           ).nfilter(Quantity=0)
 
             energy["Cumulative_Quantity"] = energy["Incr Quantity"].cumsum()
             #bathframe = reserve._bathtub(energy["Max_Output"].max())
