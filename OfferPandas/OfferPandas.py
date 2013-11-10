@@ -7,6 +7,7 @@ import numpy as np
 from collections import defaultdict
 import datetime
 import itertools
+import matplotlib.pyplot as plt
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -76,29 +77,42 @@ class OfferFrame(DataFrame):
 
 
     def _classify_bands(self):
+
+        def band_classifier(band):
+            split = band.split('_')
+            return int(split[0][4:]), split[-1]
+
+        def reserve_classifier(band):
+            if "6S" in band:
+                return "FIR"
+            elif "60S" in band:
+                return "SIR"
+            else:
+                return "Energy"
+
+        def product_classifier(band):
+            if "Plsr" in band:
+                return "PLSR"
+            elif "Twdsr" in band:
+                return "TWDSR"
+            elif "6S" in band or "60S" in band:
+                return "IL"
+            else:
+                return "Energy"
+
         band_columns = [x for x in self.columns if "Band" in x]
-        fdict = defaultdict(dict)
+        band_listing = defaultdict(dict)
         for band in band_columns:
-            number, param = (int(band.split('_')[0][4:]), band.split('_')[-1])
-            rt, pt = (self._reserve_type(band), self._product_type(band))
-            fdict[(pt, rt, number)][param] = band
-        return fdict
 
+            number, param =  band_classifier(band)
+            rt, pt = (reserve_classifier(band), product_classifier(band))
 
+            band_listing[(pt, rt, number)][param] = band
 
-    def _reserve_type(self, band):
-        return "FIR" if "6S" in band else "SIR" if "60S" in band else "Energy"
+        return band_listing
 
-
-    def _product_type(self, band):
-        if "Plsr" in band:
-            return "PLSR"
-        elif "Twdsr" in band:
-            return "TWDSR"
-        elif "6S" in band or "60S" in band:
-            return "IL"
-        else:
-            return "Energy"
+    def create_map(self, func, items):
+        return {x: func(x) for x in items}
 
 
     def _convert_date(self):
@@ -107,12 +121,14 @@ class OfferFrame(DataFrame):
 
 
     def _create_timestamp(self):
-        num_min = {x: datetime.timedelta(minutes=int(x*30-15))
-                  for x in self["Trading_Period"].unique()}
+        create_time = lambda x: datetime.timedelta(minutes=int(x*30-15))
+        periods = np.arange(1,51,1)
+        minute_map = self.create_map(create_time, periods)
 
-        minutes = self["Trading_Period"].map(num_min)
+        minutes = self["Trading_Period"].map(minute_map)
         self["Timestamp"] = self["Trading_Date"] + minutes
         return self
+
 
     def efilter(self, **kargs):
         arr = self.copy()
@@ -120,11 +136,13 @@ class OfferFrame(DataFrame):
             arr = arr[arr[key] == value]
         return OfferFrame(arr)
 
+
     def rfilter(self, **kargs):
         arr = self.copy()
         for key, values in kargs.iteritems():
             arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
         return OfferFrame(arr)
+
 
     def nfilter(self, **kargs):
         arr = self.copy()
@@ -139,19 +157,26 @@ class OfferFrame(DataFrame):
 
 
     def incrementalise(self):
-        self["Incr Quantity"] = 1
         return OfferFrame(pd.concat(self._single_increment(), axis=1).T)
 
 
     def _market_node(self):
-        lammn = lambda x: " ".join([x[0], "".join([x[1], str(x[2])])])
-        self["Market_Node_ID"] = self[["Node", "Station", "Unit"]].apply(
-                        lammn, axis=1)
+
+        def create_node(series):
+            station = "".join([series["Station"], str(series["Unit"])])
+            node = " ".join([series["Node"], station])
+            return node
+
+        self["Market_Node_ID"] = self.apply(create_node, axis=1)
         return self
 
 
     def _single_increment(self):
         """ Note assume a single timestamp """
+        # Initialise the column here, important don't remove
+        self["Incr Quantity"] = 1
+        # Iterate through the series and adjust incr quantity to a fractional
+        # Offer as needed
         for index, series in self.iterrows():
             power = series["Quantity"]
             series["Incr Quantity"] = 1
@@ -162,58 +187,192 @@ class OfferFrame(DataFrame):
 
 
     def _bathtub(self, capacity):
+        """ A series of operations to create a Bathtub constraint upon
+        a reserve offer for a particular unit.
+        The maximum capacity of the unit needs to be passed to the function.
+        This function is called by the fan curve function.
 
+        """
         arr = self.sort("Price")
-        capline = np.arange(1, capacity+1,1)
-        rline = np.zeros(len(capline))
-        filt_old = np.zeros(len(capline))
-        rdict = {}
+        market_node = arr["Market_Node_ID"].unique()[0]
+
+        # Set up vectors for marginal calculations
+        capacity_line = np.arange(1, capacity+1,1)
+        reserve_line = np.zeros(len(capacity_line))
+        previous_offer = np.zeros(len(capacity_line))
+
+        offer_curves = {}
+
         for index, row in arr.iterrows():
             price = row["Price"]
 
-            reserve = capline * row["Percent"] / 100.
-            rmap = np.where(reserve <= row["Quantity"], reserve, row["Quantity"])
+            # Proportionality Constraint Line
+            incr_reserve = capacity_line * row["Percent"] / 100.
 
-            rline = rline + rmap
-            filt = np.where(rline <= capline[::-1], rline, capline[::-1])
-            entry = filt - filt_old
-            rdict[price] = entry[1:] - entry[:-1]
-            filt_old = filt.copy()
+            # Maximum Offer Line
+            partial_offer = np.where(incr_reserve <= row["Quantity"],
+                            incr_reserve, row["Quantity"])
+
+            # Add them together
+            reserve_line = reserve_line + partial_offer
+
+            # Combined Capacity Line
+            full_offer = np.where(reserve_line <= capacity_line[::-1],
+                                  reserve_line, capacity_line[::-1])
+
+            # Get a Marginal Offer for moving up the stacks
+            marginal_offer = full_offer - previous_offer
+            offer_curves[price] = marginal_offer[1:] - marginal_offer[:-1]
+            previous_offer = full_offer.copy()
 
         # Create a DF
-        df = pd.DataFrame(rdict)
+        df = pd.DataFrame(offer_curves)
         df.index = np.arange(1, len(df)+1,1)
-        df = pd.DataFrame({"Reserve_Quantity": df.stack()})
-        df["Cumulative_Quantity"] = df.index.map(lambda x: x[0])
-        df["Reserve_Price"] = df.index.map(lambda x: x[1])
-        df["Market_Node_ID"] = arr["Market_Node_ID"].unique()[0]
-        #df["Timestamp"] = arr["Timestamp"].unique()[0]
-        return df
+
+        bathtub = pd.DataFrame({"Reserve_Quantity": df.stack()})
+
+        # Filter the index to get the cumulaive quantity and price
+        bathtub["Cumulative_Quantity"] = bathtub.index.map(lambda x: x[0])
+        bathtub["Reserve_Price"] = bathtub.index.map(lambda x: x[1])
+
+        bathtub["Market_Node_ID"] = market_node
+        #bathtub["Timestamp"] = arr["Timestamp"].unique()[0]
+        return bathtub
 
     def _merge_incr(self, reserve):
 
         #self["Cumulative_Quantity"] = self["Incr Quantity"].cumsum()
         indices = ("Market_Node_ID", "Cumulative_Quantity")
+        capacity = self["Max_Output"].max()
+
         if len(reserve) > 0:
-            bath = reserve._bathtub(self["Max_Output"].max())
-            return self.merge(bath, left_on=indices, right_on=indices,
-                         how='outer')
+            bath = reserve._bathtub(capacity)
+
+            return self.merge(bath, left_on=indices, right_on=indices)
         else:
             return self
 
-    def create_fan(self, reserveoffer, reserve_type="FIR", product_type="PLSR"):
-        return pd.concat(self._create_fan(reserveoffer, reserve_type, product_type), ignore_index=True)
+
+    def aggregate_fan(self, price):
+        """ Assumes than the OfferFrame is in the fan representation
+        """
+
+        arr1 = self.rfilter(Reserve_Price=(0, price))
+        arr2 = self.rfilter(Reserve_Price=(price+0.001, 1000000))
+        arr2["Reserve_Quantity"] = 0
+        arr = pd.concat([arr1, arr2], ignore_index=True)
+
+
+        agg_met = {"Incr Quantity": np.max,
+                   "Reserve_Quantity": np.sum}
+
+        group_indices = ("Market_Node_ID", "Cumulative_Quantity", "Price")
+
+        return arr.groupby(group_indices, as_index=False).aggregate(agg_met).sort("Price")
+
+    def _get_increments(self, column, increment=None):
+
+        if not increment:
+            increment = np.sort(self[column].unique())
+        else:
+            max_price = self[column].max()
+            increment.extend([max_price])
+            increment = [x for x in increment if x <= max_price]
+
+        return increment
+
+
+    def plot_fan(self, reserve_increments=None, energy_increments=None):
+        """ Assumes the OfferFrame is represented as a Fan
+        """
+
+
+
+        fig, axes = plt.subplots(1, 1, figsize=(16,9))
+
+        reserve_increments = self._get_increments("Reserve_Price",
+                                                  reserve_increments)
+        energy_increments = self._get_increments("Price", energy_increments)
+
+        for price in np.sort(reserve_increments):
+            sub_price = self.aggregate_fan(price)
+            quantity = sub_price["Incr Quantity"].cumsum()
+            reserve = sub_price["Reserve_Quantity"].cumsum()
+            price_label = "<$%s/MWh" % price
+            axes.plot(quantity, reserve, linewidth=1.5, alpha=0.7,
+                      label=price_label)
+
+
+        ymax = np.max(reserve)
+
+        old_price = 0
+        for eprice in np.sort(energy_increments):
+            sub_price["Reserve"] = sub_price["Reserve_Quantity"].cumsum()
+            sub_price["Energy"] = sub_price["Incr Quantity"].cumsum()
+
+            if old_price > 0:
+                suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] > old_price)]
+            else:
+                suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] >= old_price)]
+
+            reserve_quantity = suben_price["Reserve"].values
+            energy_range = suben_price["Energy"].values
+            reserve_zeros = np.zeros(len(reserve_quantity))
+
+            print len(energy_range), len(reserve_zeros), len(reserve_quantity)
+
+            axes.fill_between(energy_range, reserve_zeros, reserve_quantity, alpha=0.5)
+
+            old_price = eprice
+
+        axes.set_ylim(0, ymax+20)
+
+        axes.legend()
+        axes.set_xlabel("Reserve Quantity [MW]", fontsize=16, fontname='serif')
+        axes.set_ylabel("Energy Quantity [MW]", fontsize=16, fontname='serif')
+
+        return fig, axes
+
+
+
+    def create_fan(self, reserveoffer, reserve_type="FIR",
+                   product_type="PLSR"):
+        """ Creates a Fan Curve representation of the data which can be
+        used to view the trade off between energy and reserve offers
+        at either a composite or an individual station level.
+
+        """
+        fan = pd.concat(self._create_fan(reserveoffer, reserve_type,
+                         product_type), ignore_index=True)
+
+        # Drop Dupes
+        fan = fan.drop_duplicates()
+
+        # Fill with zeros
+        fan = fan.fillna(0)
+
+        # Return as a functioning OfferFrame
+        return OfferFrame(fan)
+
 
     def _create_fan(self, reserveoffer, reserve_type, product_type):
+        """ Creates the fan curve
+        """
 
         arr = self.incrementalise()
-        for index, stamp, mnode in set(arr[["Timestamp", "Market_Node_ID"]].itertuples()):
+        for index, stamp, mnode in set(arr[["Timestamp",
+                                            "Market_Node_ID"]].itertuples()):
 
-            energy = arr.efilter(Timestamp=stamp, Market_Node_ID=mnode).nfilter(Quantity=0)
-            reserve = reserveoffer.efilter(Timestamp=stamp, Market_Node_ID=mnode, Reserve_Type=reserve_type, Product_Type=product_type).nfilter(Quantity=0)
+            energy = arr.efilter(Timestamp=stamp,
+                                 Market_Node_ID=mnode).nfilter(Quantity=0)
+
+            reserve = reserveoffer.efilter(Timestamp=stamp,
+                                           Market_Node_ID=mnode,
+                                           Reserve_Type=reserve_type,
+                                           Product_Type=product_type
+                                           ).nfilter(Quantity=0)
 
             energy["Cumulative_Quantity"] = energy["Incr Quantity"].cumsum()
-            #bathframe = reserve._bathtub(energy["Max_Output"].max())
 
             yield energy._merge_incr(reserve)
 
