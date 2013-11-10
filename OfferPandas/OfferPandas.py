@@ -7,7 +7,7 @@ import numpy as np
 from collections import defaultdict
 import datetime
 import itertools
-
+import matplotlib.pyplot as plt
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -270,13 +270,68 @@ class OfferFrame(DataFrame):
 
         return arr.groupby(group_indices, as_index=False).aggregate(agg_met).sort("Price")
 
+    def _get_increments(self, column, increment=None):
 
-    def plot_fan(self, price_increments=None):
+        if not increment:
+            increment = np.sort(self[column].unique())
+        else:
+            max_price = self[column].max()
+            increment.extend([max_price])
+            increment = [x for x in increment if x <= max_price]
+
+        return increment
+
+
+    def plot_fan(self, reserve_increments=None, energy_increments=None):
         """ Assumes the OfferFrame is represented as a Fan
         """
 
+
+
         fig, axes = plt.subplots(1, 1, figsize=(16,9))
 
+        reserve_increments = self._get_increments("Reserve_Price",
+                                                  reserve_increments)
+        energy_increments = self._get_increments("Price", energy_increments)
+
+        for price in np.sort(reserve_increments):
+            sub_price = self.aggregate_fan(price)
+            quantity = sub_price["Incr Quantity"].cumsum()
+            reserve = sub_price["Reserve_Quantity"].cumsum()
+            price_label = "<$%s/MWh" % price
+            axes.plot(quantity, reserve, linewidth=1.5, alpha=0.7,
+                      label=price_label)
+
+
+        ymax = np.max(reserve)
+
+        old_price = 0
+        for eprice in np.sort(energy_increments):
+            sub_price["Reserve"] = sub_price["Reserve_Quantity"].cumsum()
+            sub_price["Energy"] = sub_price["Incr Quantity"].cumsum()
+
+            if old_price > 0:
+                suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] > old_price)]
+            else:
+                suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] >= old_price)]
+
+            reserve_quantity = suben_price["Reserve"].values
+            energy_range = suben_price["Energy"].values
+            reserve_zeros = np.zeros(len(reserve_quantity))
+
+            print len(energy_range), len(reserve_zeros), len(reserve_quantity)
+
+            axes.fill_between(energy_range, reserve_zeros, reserve_quantity, alpha=0.5)
+
+            old_price = eprice
+
+        axes.set_ylim(0, ymax+20)
+
+        axes.legend()
+        axes.set_xlabel("Reserve Quantity [MW]", fontsize=16, fontname='serif')
+        axes.set_ylabel("Energy Quantity [MW]", fontsize=16, fontname='serif')
+
+        return fig, axes
 
 
 
