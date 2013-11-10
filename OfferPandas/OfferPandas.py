@@ -149,14 +149,17 @@ class OfferFrame(DataFrame):
 
 
     def incrementalise(self):
-        self["Incr Quantity"] = 1
         return OfferFrame(pd.concat(self._single_increment(), axis=1).T)
 
 
     def _market_node(self):
-        create_node = lambda x: " ".join([x[0], "".join([x[1], str(x[2])])])
-        self["Market_Node_ID"] = self[["Node", "Station",
-                                       "Unit"]].apply(create_node, axis=1)
+
+        def create_node(series):
+            station = "".join([series["Station"], str(series["Unit"])])
+            node = " ".join([series["Node"], station])
+            return node
+
+        self["Market_Node_ID"] = self.apply(create_node, axis=1)
         return self
 
 
@@ -191,16 +194,17 @@ class OfferFrame(DataFrame):
         for index, row in arr.iterrows():
             price = row["Price"]
 
-            reserve = capacity_line * row["Percent"] / 100.
+            # Proportionality Constraint Line
+            incr_reserve = capacity_line * row["Percent"] / 100.
 
-            # Boolean to set marginal offer to the maximum as needed
-            partial_offer = np.where(reserve <= row["Quantity"],
-                            reserve, row["Quantity"])
+            # Maximum Offer Line
+            partial_offer = np.where(incr_reserve <= row["Quantity"],
+                            incr_reserve, row["Quantity"])
 
             # Add them together
             reserve_line = reserve_line + partial_offer
 
-            # Boolean to handle the combined capacity constraint
+            # Combined Capacity Line
             full_offer = np.where(reserve_line <= capacity_line[::-1],
                                   reserve_line, capacity_line[::-1])
 
@@ -248,7 +252,6 @@ class OfferFrame(DataFrame):
 
     def _create_fan(self, reserveoffer, reserve_type, product_type):
         """ Creates the fan curve
-
         """
 
         arr = self.incrementalise()
