@@ -295,17 +295,17 @@ class OfferFrame(DataFrame):
         sec_width = sec_height = 0.1
 
         left_mid = left + width + 0.01
-        left_right = left + width + sec_width + 0.02
+        left_right = left + width + sec_width*1.7 + 0.02
 
         bottom_mid = bottom + height + 0.01
         bottom_top = bottom + height + sec_height*1.7 + 0.02
 
         fan_limits = [left, bottom, width, height]
         energy_stack_limit = [left, bottom+width+0.01, width, sec_height*1.7]
-        reserve_stack_limit = [left_mid, bottom, sec_width, height]
+        reserve_stack_limit = [left_mid, bottom, sec_width*1.7, height]
 
         energy_color_limit = [left, bottom_top, width, sec_height*0.3]
-        reserve_color_limit = [left_right, bottom, sec_width, height]
+        reserve_color_limit = [left_right, bottom, sec_width*0.3, height]
 
         fan_axes = plt.axes(fan_limits)
         energy_stack_axes = plt.axes(energy_stack_limit)
@@ -352,18 +352,15 @@ class OfferFrame(DataFrame):
             # Fan Colours
             fan_axes.fill_between(energy_range, reserve_zeros, reserve_quantity, alpha=0.5, color=c)
 
-            ## Energy Colourbar
-            #energy_ones = np.ones(len(reserve_zeros))
-            #energy_color_axes.fill_between(energy_range, reserve_zeros, energy_ones, alpha=0.5, color=c)
-            #quantity_locations.append(np.max(energy_range))
-
             old_price = eprice
 
         fan_axes.set_ylim(0, ymax+20)
 
-        fan_axes.legend()
+
         fan_axes.set_ylabel("Reserve Quantity [MW]", fontsize=16, fontname='serif')
         fan_axes.set_xlabel("Energy Quantity [MW]", fontsize=16, fontname='serif')
+
+
 
 
         # Plot the Energy Price Stack
@@ -377,22 +374,44 @@ class OfferFrame(DataFrame):
         # Energy Color Bar (Discrete)
         for i, (price, c) in enumerate(zip(energy_increments, energy_map)):
             energy_color_axes.fill_between([i, i+1], [0, 0], [1, 1], color=c, alpha=0.5)
-            price_text = "$%0.2f/MWh" % price
+            price_text = "$%0.0f" % price
 
-            xloc = 0.1 + width / len(energy_increments) * (i + 0.2)
+            xloc = 0.1 + width / len(energy_increments) * (i + 0.3)
             fig.text(xloc, bottom_top+sec_height*0.25/2, price_text)
 
 
         # Remove Xticks
         energy_stack_axes.xaxis.set_major_locator(plt.NullLocator())
-
         energy_color_axes.xaxis.set_major_locator(plt.NullLocator())
-
         energy_color_axes.yaxis.set_major_locator(plt.NullLocator())
-
         energy_color_axes.set_ylim(0, 1)
 
+        # Plot the Reserve Price Stack
 
+        reserve_price_stack = self.groupby(["Market_Node_ID", "Reserve_Price", "Cumulative_Quantity"], as_index=False)["Reserve_Quantity"].sum()
+        reserve_price_stack = reserve_price_stack.sort("Reserve_Price")
+
+        res = reserve_price_stack[reserve_price_stack["Reserve_Quantity"]>0]
+        res["Cumulative"] = res["Reserve_Quantity"].cumsum()
+
+        reserve_stack_axes.plot(res["Reserve_Price"], res["Cumulative"])
+        reserve_stack_axes.set_ylim(0, ymax+20)
+        reserve_stack_axes.set_xlim(0, 150)
+
+        for i, (price, c) in enumerate(zip(reserve_increments, reserve_map)):
+            reserve_color_axes.fill_between([0, 1], [i, i], [i+1, i+1], color=c)
+            reserve_price_text = "$%0.0f" % price
+            yloc = 0.1 + height / len(reserve_increments) * (i + 0.45)
+            fig.text(left_right+0.0075, yloc, reserve_price_text)
+
+        reserve_color_axes.set_xlim(0,1)
+        reserve_color_axes.set_ylim(0, len(reserve_increments))
+
+        # Remove Ticks
+        reserve_stack_axes.yaxis.set_major_locator(plt.NullLocator())
+        reserve_stack_axes.xaxis.tick_top()
+        reserve_color_axes.yaxis.set_major_locator(plt.NullLocator())
+        reserve_color_axes.xaxis.set_major_locator(plt.NullLocator())
 
         return fig
 
