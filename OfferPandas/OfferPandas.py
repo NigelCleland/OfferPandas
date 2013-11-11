@@ -8,6 +8,8 @@ from collections import defaultdict
 import datetime
 import itertools
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -286,32 +288,60 @@ class OfferFrame(DataFrame):
         """ Assumes the OfferFrame is represented as a Fan
         """
 
+        fig = plt.figure(1, figsize=(24, 14))
 
+        left = bottom = 0.1
+        width = height = 0.65
+        sec_width = sec_height = 0.1
 
-        fig, axes = plt.subplots(1, 1, figsize=(16,9))
+        left_mid = left + width + 0.01
+        left_right = left + width + sec_width + 0.02
+
+        bottom_mid = bottom + height + 0.01
+        bottom_top = bottom + height + sec_height*1.7 + 0.02
+
+        fan_limits = [left, bottom, width, height]
+        energy_stack_limit = [left, bottom+width+0.01, width, sec_height*1.7]
+        reserve_stack_limit = [left_mid, bottom, sec_width, height]
+
+        energy_color_limit = [left, bottom_top, width, sec_height*0.3]
+        reserve_color_limit = [left_right, bottom, sec_width, height]
+
+        fan_axes = plt.axes(fan_limits)
+        energy_stack_axes = plt.axes(energy_stack_limit)
+        reserve_stack_axes = plt.axes(reserve_stack_limit)
+        energy_color_axes = plt.axes(energy_color_limit)
+        reserve_color_axes = plt.axes(reserve_color_limit)
+
+        #fig, axes = plt.subplots(1, 1, figsize=(16,9))
 
         reserve_increments = self._get_increments("Reserve_Price",
                                                   reserve_increments)
         energy_increments = self._get_increments("Price", energy_increments)
 
-        for price in np.sort(reserve_increments):
+
+
+        reserve_map = cm.Blues(np.linspace(0, 1, len(reserve_increments)))
+        for price, c in zip(np.sort(reserve_increments), reserve_map):
             sub_price = self.aggregate_fan(price)
             quantity = sub_price["Incr Quantity"].cumsum()
             reserve = sub_price["Reserve_Quantity"].cumsum()
-            price_label = "<$%s/MWh" % price
-            axes.plot(quantity, reserve, linewidth=1.5, alpha=0.7,
-                      label=price_label)
+            price_label = "<=$%s/MWh" % price
+            fan_axes.plot(quantity, reserve, linewidth=1.5,
+                      label=price_label, color=c)
 
 
         ymax = np.max(reserve)
 
         old_price = 0
-        for eprice in np.sort(energy_increments):
+        quantity_locations = []
+        energy_map= cm.YlOrRd(np.linspace(0, 1, len(energy_increments)))
+        for eprice, c in zip(np.sort(energy_increments), energy_map):
             sub_price["Reserve"] = sub_price["Reserve_Quantity"].cumsum()
             sub_price["Energy"] = sub_price["Incr Quantity"].cumsum()
 
             if old_price > 0:
-                suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] > old_price)]
+                suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] >= old_price)]
             else:
                 suben_price = sub_price[(sub_price["Price"] <= eprice) & (sub_price["Price"] >= old_price)]
 
@@ -319,19 +349,52 @@ class OfferFrame(DataFrame):
             energy_range = suben_price["Energy"].values
             reserve_zeros = np.zeros(len(reserve_quantity))
 
-            print len(energy_range), len(reserve_zeros), len(reserve_quantity)
+            # Fan Colours
+            fan_axes.fill_between(energy_range, reserve_zeros, reserve_quantity, alpha=0.5, color=c)
 
-            axes.fill_between(energy_range, reserve_zeros, reserve_quantity, alpha=0.5)
+            ## Energy Colourbar
+            #energy_ones = np.ones(len(reserve_zeros))
+            #energy_color_axes.fill_between(energy_range, reserve_zeros, energy_ones, alpha=0.5, color=c)
+            #quantity_locations.append(np.max(energy_range))
 
             old_price = eprice
 
-        axes.set_ylim(0, ymax+20)
+        fan_axes.set_ylim(0, ymax+20)
 
-        axes.legend()
-        axes.set_xlabel("Reserve Quantity [MW]", fontsize=16, fontname='serif')
-        axes.set_ylabel("Energy Quantity [MW]", fontsize=16, fontname='serif')
+        fan_axes.legend()
+        fan_axes.set_ylabel("Reserve Quantity [MW]", fontsize=16, fontname='serif')
+        fan_axes.set_xlabel("Energy Quantity [MW]", fontsize=16, fontname='serif')
 
-        return fig, axes
+
+        # Plot the Energy Price Stack
+        price_stack = self.groupby(["Market_Node_ID", "Price", "Cumulative_Quantity"], as_index=False)["Incr Quantity"].max()
+
+        price_stack = price_stack.sort("Price")
+        price_stack["Cum_Quantity"] = price_stack["Incr Quantity"].cumsum()
+        energy_stack_axes.plot(price_stack["Cum_Quantity"], price_stack["Price"])
+        energy_stack_axes.set_ylim(0,1000)
+
+        # Energy Color Bar (Discrete)
+        for i, (price, c) in enumerate(zip(energy_increments, energy_map)):
+            energy_color_axes.fill_between([i, i+1], [0, 0], [1, 1], color=c, alpha=0.5)
+            price_text = "$%0.2f/MWh" % price
+
+            xloc = 0.1 + width / len(energy_increments) * (i + 0.2)
+            fig.text(xloc, bottom_top+sec_height*0.25/2, price_text)
+
+
+        # Remove Xticks
+        energy_stack_axes.xaxis.set_major_locator(plt.NullLocator())
+
+        energy_color_axes.xaxis.set_major_locator(plt.NullLocator())
+
+        energy_color_axes.yaxis.set_major_locator(plt.NullLocator())
+
+        energy_color_axes.set_ylim(0, 1)
+
+
+
+        return fig
 
 
 
