@@ -396,11 +396,11 @@ class OfferFrame(DataFrame):
 
         reserve_stack_axes.plot(res["Reserve_Price"], res["Cumulative"])
         reserve_stack_axes.set_ylim(0, ymax+20)
-        reserve_stack_axes.set_xlim(0, 150)
+        reserve_stack_axes.set_xlim(0, res["Reserve_Price"].max()+10)
 
         for i, (price, c) in enumerate(zip(reserve_increments, reserve_map)):
             reserve_color_axes.fill_between([0, 1], [i, i], [i+1, i+1], color=c)
-            reserve_price_text = "$%0.0f" % price
+            reserve_price_text = "$%0.2f" % price
             yloc = 0.1 + height / len(reserve_increments) * (i + 0.45)
             fig.text(left_right+0.0075, yloc, reserve_price_text)
 
