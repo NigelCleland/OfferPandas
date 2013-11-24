@@ -7,6 +7,7 @@ import numpy as np
 from collections import defaultdict
 import datetime
 import itertools
+import os
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -46,7 +47,10 @@ class OfferFrame(DataFrame):
 
 
     def _map_frame(self):
-        mapping = pd.read_csv("_static/nodal_metadata.csv")
+        location = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "_static/nodal_metadata.csv")
+        mapping = pd.read_csv(location)
         mapping.rename(columns={x: x.replace(' ', '_')
                         for x in mapping.columns}, inplace=True)
         return OfferFrame(self.merge(mapping, left_on="Node", right_on="Node"))
