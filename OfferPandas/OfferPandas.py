@@ -18,7 +18,7 @@ class OfferFrame(DataFrame):
 
     def __new__(cls, *args, **kargs):
 
-        arr = DataFrame.__new__(cls, *args, **kargs)
+        arr = DataFrame.__new__(cls)
 
         if type(arr) is OfferFrame:
             return arr
