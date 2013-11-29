@@ -463,7 +463,10 @@ class OfferFrame(DataFrame):
             yield energy._merge_incr(reserve)
 
 
+def load_offerframe(fName, *args, **kargs):
 
+    df = pd.read_csv(fName, *args, **kargs)
+    return OfferFrame(df)
 
 
 
