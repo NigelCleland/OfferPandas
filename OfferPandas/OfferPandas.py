@@ -8,9 +8,11 @@ from collections import defaultdict
 import datetime
 import itertools
 import os
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-import matplotlib
+
+def load_offerframe(fName, *args, **kargs):
+
+    df = pd.read_csv(fName, *args, **kargs)
+    return OfferFrame(df)
 
 class OfferFrame(DataFrame):
     """docstring for OfferFrame"""
@@ -233,7 +235,7 @@ class OfferFrame(DataFrame):
 
         # Create a DF
         df = pd.DataFrame(offer_curves)
-        df.index = np.arange(1, len(df)+1,1)
+        df.index = np.arange(1, lwen(df)+1,1)
 
         bathtub = pd.DataFrame({"Reserve_Quantity": df.stack()})
 
@@ -461,12 +463,6 @@ class OfferFrame(DataFrame):
             energy["Cumulative_Quantity"] = energy["Incr Quantity"].cumsum()
 
             yield energy._merge_incr(reserve)
-
-
-def load_offerframe(fName, *args, **kargs):
-
-    df = pd.read_csv(fName, *args, **kargs)
-    return OfferFrame(df)
 
 
 
