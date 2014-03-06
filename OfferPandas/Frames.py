@@ -149,6 +149,12 @@ class Frame(DataFrame):
         """ Create a Market Node Identifier for the generation data
         If the data is IL, attributed by the lack of a Unit column
         then the market node id is taken to be the Bus Id
+
+        Example:
+
+        GXP: HLY2201, Station: HLY: Unit 5
+        Market_Node = HLY2201 HLY5
+
         """
 
         if "Unit" in self.columns:
@@ -162,6 +168,17 @@ class Frame(DataFrame):
         return self
 
     def _stack_frame(self):
+        """ General Function to move from a horizontal format to a vertical
+        format which is easier to work with for analysis.
+        It accomplishes this by parsing the column names to figure out what
+        type of data something is and then creating column entries based upon
+        this whilst retaining meta information from the original columns.
+
+        This returns a DataFrame which is significantly larger, but should
+        be easier to work with and do analysis.
+
+        """
+
         arr = pd.concat(self._yield_frame(), ignore_index=True)
         max_names = ("Power", "Max")
         arr.rename(columns={x: "Quantity" for x in max_names}, inplace=True)
@@ -187,6 +204,24 @@ class Frame(DataFrame):
         """ Function to classify a band based on the column name
         It returns a dictionary which is then merged back into the offer
         frame data
+
+        Examples:
+        ---------
+
+        Input: Band1_PLSR_6S_Max
+        Output:
+            Band: 1, Product_Type: PLSR, Reserve_Type: FIR, Parameter: Quantity
+
+        Input: Band5_Power
+        Output:
+            Band: 5, Product_Type: Energy, Reserve_Type: Energy,
+            Parameter: Quantity
+
+        Returns
+        -------
+        band_listing: A dictionary indexed by tuples and paramters with the
+                      column name as the value.
+
         """
 
         def band_classifier(band):
@@ -232,6 +267,11 @@ class Frame(DataFrame):
 
         Furthermore, these methods should be able to be mixed up, although
         only one dictionary may be passed as an argument
+
+        Returns
+        -------
+        Frame: Filters applied, this is a new object, leaves original object
+               intact
         """
 
         arr = self.copy()
@@ -246,14 +286,61 @@ class Frame(DataFrame):
 
 
     def rfilter(self, *args, **kargs):
+        """ Implements a general purpose range filter for looking at numerical
+        quantities:
+
+        Example Usage:
+        --------------
+
+        Frame.rfilter({Price: (10,40)}) # Will get all offers with prices
+                                          between $10 and $40.
+
+        This will also work with dates, but not with string type matching
+        e.g. a range of companies
+
+        Returns
+        -------
+        Frame: Filters applied, this is a new object, leaves original object
+               intact
+
+        """
         arr = self.copy()
+
+        if args:
+            for key, value in args[0].iteritems():
+                arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
+
         for key, values in kargs.iteritems():
             arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
         return Frame(arr)
 
 
     def nfilter(self, *args, **kargs):
+        """ A negative filter, useful for excluding specific options, can
+        be used in conjunction with either argument or key word arguments.
+
+        Example Usage:
+        --------------
+
+        Frame.nfilter(Company="MRPL") # Exclude MRPL from analysis
+        Frame.nfilter({"Company": "MRPL"}) # Same as above
+
+        # Exclude all MERI offers and all hydro offers in general.
+        Frame.nfilter(Company="MERI", {"Generation_Type": "Hydro"})
+
+        Returns
+        -------
+        Frame: Filters applied, this is a new object, leaves original object
+               intact
+
+        """
+
         arr = self.copy()
+
+        if args:
+            for key, value in args[0].iteritems():
+                arr[arr[key] != value]
+
         for key, value in kargs.iteritems():
             self = arr[arr[key] != value]
 
