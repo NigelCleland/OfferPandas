@@ -287,7 +287,10 @@ class Frame(DataFrame):
 
     def rfilter(self, *args, **kargs):
         """ Implements a general purpose range filter for looking at numerical
-        quantities:
+        quantities, note, to specify a lower or upper range use arbitrarily
+        low or high values, for example, 0 and 1000000. Not perfect but is
+        simpler than implementing a custom ge/gt/lt/le filters which just
+        clutter the code base.
 
         Example Usage:
         --------------
@@ -339,15 +342,46 @@ class Frame(DataFrame):
 
         if args:
             for key, value in args[0].iteritems():
-                arr[arr[key] != value]
+                arr = arr[arr[key] != value]
 
         for key, value in kargs.iteritems():
-            self = arr[arr[key] != value]
+            arr = arr[arr[key] != value]
 
-        return Frame(self)
+        return Frame(arr)
 
 
+    def mfilter(self, *args, **kargs):
+        """  A multi filter, broadly it applies the equality filter to groups
+        of objects, not single objects, this lets you specify specific groups
+        of things to match against.
 
+        Example Usage:
+        --------------
+
+        # Returns all MRPL and GENE generation offers which are hydro or gas
+        Frame.mfilter(Company=("MRPL", "GENE"),
+                      Generation_Type=("Hydro, "Gas"))
+
+
+        Returns
+        -------
+        Frame: Filters applied, this is a new object, leaves original object
+               intact
+
+        """
+        arr = self.copy()
+
+        if args:
+            for key, values in args[0].iteritems():
+                arr = pd.concat((arr[arr[key] == value] for value in values),
+                                 ignore_index=True)
+
+        for key, values in kargs.iteritems():
+            arr = pd.concat((arr[arr[key] == value] for value in values),
+                                 ignore_index=True)
+
+
+        return Frame(arr)
 
 if __name__ == '__main__':
     pass
