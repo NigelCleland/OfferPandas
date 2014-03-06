@@ -14,10 +14,19 @@ from dateutil.parser import parse
 
 import OfferPandas
 
-def load_offerframe(fName, *args, **kargs):
+def load_offerframe(fName, map_path=None, *args, **kargs):
     """ This is a publically exposed generic function used to create
     the Frame object containing csv data. It is the primary method
     through which data should be read into the Frames
+
+    Optional argument:
+    ------------------
+    map_path: The location of a custom mapping file to use
+
+    Returns
+    -------
+    frame: A Frame object which has had a number of standard modifications
+           made to it.
     """
     df = pd.read_csv(fName, *args, **kargs)
     frame = Frame(df)
@@ -25,7 +34,7 @@ def load_offerframe(fName, *args, **kargs):
     frame = frame._column_mapping()
     frame = frame._remove_data_whitespace()
     frame = frame._market_node()
-    frame = frame._map_locations()
+    frame = frame._map_locations(full_path=map_path)
     frame = frame._parse_dates()
     frame = frame._create_identifier()
     frame = frame._stack_frame()
