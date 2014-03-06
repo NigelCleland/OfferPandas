@@ -9,6 +9,7 @@ import os
 import pandas as pd
 from pandas import DataFrame
 import numpy as np
+import matplotlib.pyplot as plt
 
 from dateutil.parser import parse
 
@@ -404,6 +405,82 @@ class Frame(DataFrame):
                     arr = arr[arr[key] != value]
 
         return Frame(arr)
+
+    def offer_stack(self, minimum_quantity=0.001):
+        """ Return an Offer Stack (group of price and quantity pairs)
+        for a particular offer frame.
+
+        Note, that it will do this for unique Trading Period Ids, as
+        otherwise the result is nonsense and doesn't make sense, these
+        arr concated together into a single frame which will need to be
+        filtered later.
+
+        Optional Arguments:
+        -------------------
+        minimum_quantity: Exclude offers below a certain quantity (e.g. 0.1)
+                          May improve clarity as some 0.001 offers exist.
+
+
+        Example Usage:
+        --------------
+            Frame.offer_stack(minimum_quantity=0.001)
+
+        Returns:
+        --------
+        Frame: A modified frame with the Cumulative_Quantity column
+               included which can be modified to determine the stack
+
+
+        """
+
+        def _offer_stack(arr, minimum_quantity=0.001):
+            arr = arr.rfilter(Quantity=(minimum_quantity, 1000000))
+            arr = arr.sort(columns=["Price", "Quantity"], ascending=[1,0])
+            arr["Cumulative_Quantity"] = arr["Quantity"].cumsum()
+            return arr
+
+        arr = self.copy()
+        unique_tpid = arr["Trading_Period_ID"].unique()
+        if len(unique_tpid) == 1:
+            return Frame(_offer_stack(arr, minimum_quantity=minimum_quantity))
+
+        elif len(unique_tpid) > 1:
+            return Frame(pd.concat((
+                    _offer_stack(arr.efilter(Trading_Period_ID=tpid),
+                                 minimum_quantity=minimum_quantity)
+                             for tpid in unique_tpid),
+                            ignore_index=True))
+
+    def plot_stack(self, figsize=(8,8)):
+        """ Convenience Function to plot the offers, will return an error
+        if multiple days are specified
+
+        """
+        unique_tpid = self["Trading_Period_ID"].unique()
+
+        if not "Cumulative_Quantity" in self.columns:
+            arr = self.offer_stack()
+        else:
+            arr = self.copy()
+
+        if len(unique_tpid) > 1:
+            raise ValueError("You must filter the data to be for a single\
+                Trading Period, current number of trading periods is\
+                %s, must be 1" % len(unique_tpid))
+
+        fig, axes = plt.subplots(1,1, figsize=figsize)
+
+        axes.plot(arr["Cumulative_Quantity"], arr["Price"], drawstyle=steps,
+                  linewidth=3, alpha=0.8, c='k', markerstyle='x')
+
+        plot_type = arr["Reserve_Type"].unique()[0]
+        axes.set_xlabel(" ".join([plot_type, "Quantity [MW]"]),
+                        fontname="Serif", fontsize=20)
+        axes.set_ylabel(" ".join([plot_type, "Price [$/MWh]"])
+                        fontname="Serif", fontsize=20)
+
+        return fig, axes
+
 
 
 if __name__ == '__main__':
