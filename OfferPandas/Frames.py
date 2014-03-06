@@ -66,6 +66,7 @@ class Frame(DataFrame):
         Returns
         -------
         Frame: A Frame object for method chaining.
+
         """
         # Title and strip all white space from the columns
         column_mapping = {x: x.strip().title() for x in self.columns}
@@ -88,6 +89,7 @@ class Frame(DataFrame):
         Returns
         -------
         Frame: A Frame object for method chaining.
+
         """
 
         # Apply the stripping to columns which are an Object type
@@ -99,13 +101,33 @@ class Frame(DataFrame):
 
         return self
 
-    def _map_locations(self):
+    def _map_locations(self, full_path=None):
         """ Map the OfferFrame with location data from a reference CSV file
+        There is a default CSV file included although a custom file may also
+        be passed as necessary.
+
+        This provides information about the specific location/island as well
+        as generation type if available for more area specific assessments
+        especially in conjunction with the filtering methods. Data does not
+        exist for all columns, e.g. Company Name and IL providers.
+
+        Added Columns:
+        --------------
+            (Location_Name, Load_Area, Island_Name, Region,
+             Generation_Type, Company_Name)
+
+        Returns
+        -------
+        Frame: Locational Metadata added based upon a static path
+
         """
         # Get the Map data as a DataFrame object
-        file_path = OfferPandas.__path__[0]
-        map_path = '_static/nodal_metadata.csv'
-        full_path = os.path.join(file_path, map_path)
+        # Default to the included metadata file
+        if not full_path:
+            file_path = OfferPandas.__path__[0]
+            map_path = '_static/nodal_metadata.csv'
+            full_path = os.path.join(file_path, map_path)
+
         map_data = pd.read_csv(full_path)
 
         # Remove the blank space and replace by underscores to merge data
