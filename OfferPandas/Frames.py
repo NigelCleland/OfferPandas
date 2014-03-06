@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import pandas as pd
-from pandas import DataFrame
-import numpy as np
 from collections import defaultdict
 import datetime
 import itertools
 import os
+
+import pandas as pd
+from pandas import DataFrame
+import numpy as np
+
 from dateutil.parser import parse
+
+import OfferPandas
 
 def load_offerframe(fName, *args, **kargs):
     """ This is a publically exposed generic function used to create
@@ -35,6 +39,13 @@ class Frame(DataFrame):
     creates some custom formatting options and included useful utilities
     such as renaming columns, creating some helper columns and mapping
     locations as well as the primary DataFrame methods still easily available
+
+    The best method of creating a Frame is through the load_offerframe method
+    which is also publically expsosed, this creates the dataframe as well
+    as a number of convenience formatting options.
+
+    If creating manually, you must pass an existing Pandas DataFrame with
+    the offer data in the standard WITS format.
     """
 
     def __new__(cls, *args, **kargs):
@@ -48,7 +59,13 @@ class Frame(DataFrame):
 
     def _column_mapping(self):
         """ Update the Column Mapping to improve the naming structure,
-        Returns the object itself
+        Major changes include stripping white space and moving towards
+        a title case as well setting a consistent naming schema for
+        the Grid Points across Energy IL and Reserve
+
+        Returns
+        -------
+        Frame: A Frame object for method chaining.
         """
         # Title and strip all white space from the columns
         column_mapping = {x: x.strip().title() for x in self.columns}
@@ -62,8 +79,15 @@ class Frame(DataFrame):
         return self
 
     def _remove_data_whitespace(self):
-        """ The data can have unnecessary white space which must be removed
-        in order to make the analysis work properly.
+        """ The data can have unnecessary beginning and trailing white space
+        which must be removed in order to make the analysis work properly.
+
+        There is a type chech on the data columns, will only apply the method
+        to columns which are of the object type.
+
+        Returns
+        -------
+        Frame: A Frame object for method chaining.
         """
 
         # Apply the stripping to columns which are an Object type
@@ -79,7 +103,7 @@ class Frame(DataFrame):
         """ Map the OfferFrame with location data from a reference CSV file
         """
         # Get the Map data as a DataFrame object
-        file_path = os.path.dirname(__file__)
+        file_path = OfferPandas.__path__[0]
         map_path = '_static/nodal_metadata.csv'
         full_path = os.path.join(file_path, map_path)
         map_data = pd.read_csv(full_path)
