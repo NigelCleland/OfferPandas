@@ -268,6 +268,9 @@ class Frame(DataFrame):
         Furthermore, these methods should be able to be mixed up, although
         only one dictionary may be passed as an argument
 
+        Can also handle iterable arguments interchangeabley with iterables
+        to do a multiple match.
+
         Returns
         -------
         Frame: Filters applied, this is a new object, leaves original object
@@ -277,11 +280,20 @@ class Frame(DataFrame):
         arr = self.copy()
         if args:
             for key, value in args[0].iteritems():
-                arr = arr[arr[key] == value]
+                if hasattr(value, "__iter__"):
+                    arr = pd.concat((arr[arr[key] == each] for each in value),
+                                    ignore_index=True)
+                else:
+                    arr = arr[arr[key] == value]
 
         if kargs:
             for key, value in kargs.iteritems():
-                arr = arr[arr[key] == value]
+                if hasattr(value, "__iter__"):
+                    arr = pd.concat((arr[arr[key] == each] for each in value),
+                                    ignore_index=True)
+                else:
+                    arr = arr[arr[key] == value]
+
         return Frame(arr)
 
 
@@ -313,14 +325,18 @@ class Frame(DataFrame):
             for key, value in args[0].iteritems():
                 arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
 
-        for key, values in kargs.iteritems():
-            arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
+        if kargs:
+            for key, values in kargs.iteritems():
+                arr = arr[(arr[key] >= values[0]) & (arr[key] <= values[1])]
+
         return Frame(arr)
 
 
     def nfilter(self, *args, **kargs):
         """ A negative filter, useful for excluding specific options, can
         be used in conjunction with either argument or key word arguments.
+
+        Can also handle multiple matchings via a simpler iterable.s
 
         Example Usage:
         --------------
@@ -342,46 +358,22 @@ class Frame(DataFrame):
 
         if args:
             for key, value in args[0].iteritems():
-                arr = arr[arr[key] != value]
+                if hasattr(value, "__iter__"):
+                    arr = pd.concat((arr[arr[key] != each] for each in value),
+                                    ignore_index=True)
+                else:
+                    arr = arr[arr[key] != value]
 
-        for key, value in kargs.iteritems():
-            arr = arr[arr[key] != value]
-
-        return Frame(arr)
-
-
-    def mfilter(self, *args, **kargs):
-        """  A multi filter, broadly it applies the equality filter to groups
-        of objects, not single objects, this lets you specify specific groups
-        of things to match against.
-
-        Example Usage:
-        --------------
-
-        # Returns all MRPL and GENE generation offers which are hydro or gas
-        Frame.mfilter(Company=("MRPL", "GENE"),
-                      Generation_Type=("Hydro, "Gas"))
-
-
-        Returns
-        -------
-        Frame: Filters applied, this is a new object, leaves original object
-               intact
-
-        """
-        arr = self.copy()
-
-        if args:
-            for key, values in args[0].iteritems():
-                arr = pd.concat((arr[arr[key] == value] for value in values),
-                                 ignore_index=True)
-
-        for key, values in kargs.iteritems():
-            arr = pd.concat((arr[arr[key] == value] for value in values),
-                                 ignore_index=True)
-
+        if kargs:
+            for key, value in kargs.iteritems():
+                if hasattr(value, "__iter__"):
+                    arr = pd.concat((arr[arr[key] != each] for each in value),
+                                  ignore_index=True)
+                else:
+                    arr = arr[arr[key] != value]
 
         return Frame(arr)
+
 
 if __name__ == '__main__':
     pass
