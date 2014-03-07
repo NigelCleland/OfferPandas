@@ -476,7 +476,7 @@ class Frame(DataFrame):
         plot_type = arr["Reserve_Type"].unique()[0]
         axes.set_xlabel(" ".join([plot_type, "Quantity [MW]"]),
                         fontname="Serif", fontsize=20)
-        axes.set_ylabel(" ".join([plot_type, "Price [$/MWh]"])
+        axes.set_ylabel(" ".join([plot_type, "Price [$/MWh]"]),
                         fontname="Serif", fontsize=20)
 
         return fig, axes
