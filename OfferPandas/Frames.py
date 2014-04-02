@@ -67,6 +67,17 @@ class Frame(DataFrame):
         else:
             return arr.view(Frame)
 
+
+    def modify_in_place(self):
+
+        self._column_mapping()
+        self._remove_data_whitespace()
+        self._market_node()
+        self._map_locations()
+        self._parse_dates()
+        self._create_identifier()
+        self._stack_frame()
+
     def _column_mapping(self):
         """ Update the Column Mapping to improve the naming structure,
         Major changes include stripping white space and moving towards
