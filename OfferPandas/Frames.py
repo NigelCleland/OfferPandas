@@ -68,15 +68,16 @@ class Frame(DataFrame):
             return arr.view(Frame)
 
 
-    def modify_in_place(self):
+    def modify_frame(self):
 
-        self._column_mapping()
-        self._remove_data_whitespace()
-        self._market_node()
-        self._map_locations()
-        self._parse_dates()
-        self._create_identifier()
-        self._stack_frame()
+        frame = self._column_mapping()
+        frame = frame._remove_data_whitespace()
+        frame = frame._market_node()
+        frame = frame._map_locations()
+        frame = frame._parse_dates()
+        frame = frame._create_identifier()
+        frame = frame._stack_frame()
+        return frame
 
     def _column_mapping(self):
         """ Update the Column Mapping to improve the naming structure,
@@ -187,8 +188,9 @@ class Frame(DataFrame):
         """
 
         unique_dates = self["Trading_Date"].unique()
-        date_mapping = {x: parse(x) for x in unique_dates}
-        self["Trading_Date"] =  self["Trading_Date"].map(date_mapping)
+        if type(self["Trading_Date"][0]) not in (datetime.date, datetime.datetime):
+            date_mapping = {x: parse(x) for x in unique_dates}
+            self["Trading_Date"] =  self["Trading_Date"].map(date_mapping)
         return self
 
 
