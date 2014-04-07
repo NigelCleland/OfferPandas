@@ -118,7 +118,11 @@ class Frame(DataFrame):
         strip = lambda x: x.strip()
         for col in self.columns:
             if self[col].dtype == "O":
-                self[col] = self[col].apply(strip)
+                try:
+                    self[col] = self[col].apply(strip)
+                except AttributeError as e:
+                    print e
+
 
         return self
 
