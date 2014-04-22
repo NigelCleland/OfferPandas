@@ -208,7 +208,7 @@ class Frame(DataFrame):
 
         if "Unit" in self.columns:
             station = self["Station"] + self["Unit"].astype(str)
-            identifier = self["Bus_Id"] + " " + station
+            identifier = self["Bus_Id"].astype(str) + " " + station
             self["Node"] = identifier
 
         else:
