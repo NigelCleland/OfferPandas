@@ -5,6 +5,7 @@ from collections import defaultdict
 import datetime
 import itertools
 import os
+import simplejson
 
 import pandas as pd
 from pandas import DataFrame
@@ -15,7 +16,7 @@ from dateutil.parser import parse
 
 import OfferPandas
 
-def load_offerframe(fName, map_path=None, *args, **kargs):
+def load_offerframe(fName, map_path=None, frame_type="Energy", *args, **kargs):
     """ This is a publically exposed generic function used to create
     the Frame object containing csv data. It is the primary method
     through which data should be read into the Frames
@@ -29,7 +30,29 @@ def load_offerframe(fName, map_path=None, *args, **kargs):
     frame: A Frame object which has had a number of standard modifications
            made to it.
     """
-    df = pd.read_csv(fName, *args, **kargs)
+
+    # Should do a check on the first line of the file here to check for the
+    # titles so that we can change the argument to the read_csv portion or
+    # the rest of the code will break.
+
+    # Little bit of defensive coding
+    assert frame_type in ("Energy", "PLSR_Reserve", "IL_Reserve")
+
+    # Sanity check on the first line
+    with open(fName, 'rb') as f:
+        firstline = f.readline()
+
+    if "Company" not in firstline:
+        # Get the column encoding information
+        file_path = OfferPandas.__path__[0]
+        col_path = '_static/column_mapping.json'
+        full_path = os.path.join(file_path, col_path)
+
+        column_encoding = simplejson.load(open(full_path))
+        df = pd.read_csv(fName, names=column_encoding[frame_type])
+    else:
+
+        df = pd.read_csv(fName, *args, **kargs)
     frame = Frame(df)
 
     frame = frame._column_mapping()
