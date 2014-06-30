@@ -52,7 +52,7 @@ def load_offerframe(fName, map_path=None, frame_type="Energy", *args, **kargs):
         df = pd.read_csv(fName, names=column_encoding[frame_type])
     else:
 
-        df = pd.read_csv(fName, *args, **kargs)
+        df = pd.read_csv(fName, *args git,**kargs)
     frame = Frame(df)
 
     frame = frame._column_mapping()
