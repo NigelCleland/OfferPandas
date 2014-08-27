@@ -45,7 +45,7 @@ project_root = os.path.dirname(cwd)
 #         else:
 #             return Mock()
 
-MOCK_MODULES = ['pandas', 'numpy', 'matplotlib', 'matplotlib.pyplot', 'simplejson', "dateutil.parser"]
+MOCK_MODULES = ['pandas', 'numpy', 'matplotlib', 'matplotlib.pyplot', 'simplejson', 'dateutil', 'dateutil.parser']
 
 #['pandas.io.sql', 'pandas.tseries.offsets', 'matplotlib', 'matplotlib.pyplot ', 'tseries', 'offsets', 'tseries.offsets', 'io', 'sql', 'io.sql', 'pyplot', 'numpy', 'pandas', 'pytz']
 for mod_name in MOCK_MODULES:
