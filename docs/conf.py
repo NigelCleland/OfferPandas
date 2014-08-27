@@ -13,6 +13,7 @@
 # serve to show the default.
 
 import sys, os
+import mock
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -25,28 +26,30 @@ project_root = os.path.dirname(cwd)
 
 
 # -- General configuration -----------------------------------------------------
-# Create Mock Modules to get around C dependencies on Read the Docs
-class Mock(object):
-    def __init__(self, *args, **kwargs):
-        pass
+# # Create Mock Modules to get around C dependencies on Read the Docs
+# class Mock(object):
+#     def __init__(self, *args, **kwargs):
+#         pass
 
-    def __call__(self, *args, **kwargs):
-        return Mock()
+#     def __call__(self, *args, **kwargs):
+#         return Mock()
 
-    @classmethod
-    def __getattr__(cls, name):
-        if name in ('__file__', '__path__'):
-            return '/dev/null'
-        elif name[0] == name[0].upper():
-            mockType = type(name, (), {})
-            mockType.__module__ = __name__
-            return mockType
-        else:
-            return Mock()
+#     @classmethod
+#     def __getattr__(cls, name):
+#         if name in ('__file__', '__path__'):
+#             return '/dev/null'
+#         elif name[0] == name[0].upper():
+#             mockType = type(name, (), {})
+#             mockType.__module__ = __name__
+#             return mockType
+#         else:
+#             return Mock()
 
-MOCK_MODULES = ['pandas.io.sql', 'pandas.tseries.offsets', 'matplotlib.pyplot ', 'tseries', 'offsets', 'tseries.offsets', 'io', 'sql', 'io.sql', 'pyplot', 'numpy', 'pandas', 'matplotlib', 'pytz']
+MOCK_MODULES = []
+
+#['pandas.io.sql', 'pandas.tseries.offsets', 'matplotlib', 'matplotlib.pyplot ', 'tseries', 'offsets', 'tseries.offsets', 'io', 'sql', 'io.sql', 'pyplot', 'numpy', 'pandas', 'pytz']
 for mod_name in MOCK_MODULES:
-    sys.modules[mod_name] = Mock()
+    sys.modules[mod_name] = mock.Mock()
 
 # Insert the project root dir as the first element in the PYTHONPATH.
 # This lets us ensure that the source package is imported, and that its
