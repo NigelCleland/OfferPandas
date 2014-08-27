@@ -479,7 +479,7 @@ class Frame(DataFrame):
             arr["Cumulative_Quantity"] = arr["Quantity"].cumsum()
             return arr
 
-        arr = self.copy()
+        arr = Frame(self.copy())
         unique_tpid = arr["Trading_Period_ID"].unique()
         if len(unique_tpid) == 1:
             return Frame(_offer_stack(arr, minimum_quantity=minimum_quantity))
