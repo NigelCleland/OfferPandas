@@ -1,2 +1,2 @@
-sphinxcontrib-napoleon
-mock
+sphinxcontrib-napoleon>=0.2.8
+mock>=1.0.1
